@@ -13,8 +13,8 @@
 #define BRIGHTNESS 100
 #define NUM_LEDS 48
 
-const int timeToRace = 30000;   // in millisec, time you have to complete race.
-int lapsToWin = 1; // The number of laps to be completed for win (choose 1 or 2).
+int lapsToWin = 2; // The number of laps to be completed for win.
+const int timeToRace = 30000;   // in millisec, time you have to complete the designated # of laps.
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LEDRingPIN, NEO_RGB + NEO_KHZ800);
 
@@ -25,7 +25,7 @@ int resetting = 1, racing = 0, hasWon = 1, ledState=0; // flags
 int lapCounter; 
 int timingIndexLED;
 unsigned long startMillis=0, previousTimingMillis, previousBlinkMillis, currentMillis=0;
-long timeElapsed = 0; //used to measure the time elapsed during a race and during resetting.
+long timeElapsed = 0;
 int hallLineState=1, hallBeforeState, hallBeforePrevState, hallLinePrevState;   // variables for reading and storing the hall sensors status
 
 float rampFunc(float val){
@@ -49,7 +49,8 @@ void setup() {
   motor.setup();
   motor.setProfile(rampFunc);
   delay(1000);
-  allLEDS(0,0,0); // turn leds off  
+  allLEDS(0,0,0); // turn leds off
+  
 }
 
 void loop() {
@@ -58,13 +59,13 @@ void loop() {
 
   // blink lights during reset according to win or lose.
   if (resetting){
-    if (hasWon){      
+    if (hasWon){      // create rainbow pattern. ledState used to change color wheel.
       for(int i=0; i<strip.numPixels(); i++) {
         strip.setPixelColor(i, Wheel((i+ledState) & 255));         
       }
       strip.show();
       ledState++;
-    }else{  // lose lights, blinking red
+    }else{  // lose lights, blinking red, ledState toggles off/on
       if (currentMillis - previousBlinkMillis >= 500){
         previousBlinkMillis = currentMillis;
         if (ledState ==0){
@@ -77,11 +78,13 @@ void loop() {
       }
     }  
   }
+
   
   hallBeforePrevState = hallBeforeState;
   hallLinePrevState = hallLineState;
   hallBeforeState = digitalRead(HallBeforeLinePIN);
   hallLineState = digitalRead(HallLinePIN);
+  
 
   if (hallBeforeState && !hallBeforePrevState) {  // passed sensor hallBefore
     motor.ramp(-.2,1000);
@@ -103,11 +106,13 @@ void loop() {
     if (resetting && timeElapsed>4000){ 
       resetting =0;
       allLEDS(0,0,0);
-      strip.setPixelColor(0, 255,100,0); // set color orange to match start button
+      strip.setPixelColor(44, 139,0,139); // set color purple to create virtual pace car
+      strip.setPixelColor(45, 139,0,139); // 
+      strip.setPixelColor(46, 139,0,139); // 
+      strip.setPixelColor(47, 139,0,139); // 
       strip.show();
     }
   }
-  
   
   if (resetting == 1 && timeElapsed > 2000){ // let solar power die, then kick in motor reset.
     motor.idle();
@@ -120,18 +125,27 @@ void loop() {
   }
 
   if (racing == 1){
+
+    
     // change LED timing ring  
     if (currentMillis - previousTimingMillis >= timeToRace / (strip.numPixels() * lapsToWin)){
       previousTimingMillis = currentMillis;
-      if (timingIndexLED <= 47){
-        strip.setPixelColor(timingIndexLED, 139, 0, 139); //turn green to purple on lap 1 
+
+      strip.setPixelColor(timingIndexLED, 139,0,139); // turn front LED on.
+      int timingIndexLEDoff = timingIndexLED -4;
+      if (timingIndexLEDoff < 0){
+        timingIndexLEDoff = timingIndexLEDoff + 48;
       }
-      if (timingIndexLED > 47){
-        strip.setPixelColor(timingIndexLED-48, 0, 0, 0); //turn purple off on lap 2
-      } 
+      strip.setPixelColor(timingIndexLEDoff, 0,0,0); // turn back LED off.
       strip.show();
       timingIndexLED++;
+      if (timingIndexLED ==48){
+        timingIndexLED=0;
+      }
+      
     }
+
+
     
     if (lapCounter==lapsToWin){
       endRace(1);      
@@ -152,9 +166,13 @@ void waitToStart(){
   timingIndexLED = 0;
   resetting=0;
   timeElapsed =0;
-  colorWipe(21,255,0,0); //red
-  colorWipe(21,255,255,0);  //yellow
-  colorWipe(21,0,255,0);  //green
+  colorWipe(60,255,0,0); //red
+  colorWipe(60,255,255,0);  //yellow
+  colorWipe(60,0,255,0);  //green
+  for(uint16_t i=30; i<strip.numPixels(); i++) {
+    strip.setPixelColor(47-i, 0,0,0); // turn off all green LEDS     
+  }
+  strip.show(); 
   digitalWrite(StartBtnLED, LOW);  
   digitalWrite(LightRelayPIN, HIGH); // turn on the lamp.
   previousTimingMillis = startMillis = millis();   //record start time, initialize perviousTimingMillis for new race.
@@ -171,7 +189,7 @@ void endRace(int hw){
 }
 
 void colorWipe(int wait, int R, int G, int B){
-  for(uint16_t i=0; i<strip.numPixels(); i++) {
+  for(uint16_t i=30; i<strip.numPixels(); i++) {
     strip.setPixelColor(47-i, R,G,B); //color wipe
     delay(wait);
     strip.show();    
