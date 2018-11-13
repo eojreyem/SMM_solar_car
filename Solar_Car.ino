@@ -14,7 +14,7 @@
 #define NUM_LEDS 48
 
 const int timeToRace = 30000;   // in millisec, time you have to complete race.
-int lapsToWin = 1; // The number of laps to be completed for win (choose 1 or 2).
+int lapsToWin = 2; // The number of laps to be completed for win (choose 1 or 2).
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LEDRingPIN, NEO_RGB + NEO_KHZ800);
 

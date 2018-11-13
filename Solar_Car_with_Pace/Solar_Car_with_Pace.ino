@@ -1,7 +1,8 @@
-#include "stepperControlAdafruit.h"
+//#include "stepperControlAdafruit.h"
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h>
 #include <Adafruit_MotorShield.h>
+#include "utility/Adafruit_MS_PWMServoDriver.h"
 
 #define LEDRingPIN 6
 #define HallLinePIN 5
@@ -13,24 +14,27 @@
 #define BRIGHTNESS 100
 #define NUM_LEDS 48
 
-int lapsToWin = 2; // The number of laps to be completed for win.
-const int timeToRace = 30000;   // in millisec, time you have to complete the designated # of laps.
+int lapsToWin = 1; // The number of laps to be completed for win.
+const int timeToRace = 20000;   // in millisec, time you have to complete the designated # of laps.
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LEDRingPIN, NEO_RGB + NEO_KHZ800);
+Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
+
+Adafruit_DCMotor *myMotor = AFMS.getMotor(1);
 
 //steps per rev, which port, and max RPM
-stepper motor(100,2,30);
+//stepper motor(100,2,30);
 
 int resetting = 1, racing = 0, hasWon = 1, ledState=0; // flags
-int lapCounter; 
+int lapCounter, currentSpeed=20, targetSpeed=100; 
 int timingIndexLED;
-unsigned long startMillis=0, previousTimingMillis, previousBlinkMillis, currentMillis=0;
+unsigned long startMillis=0, previousTimingMillis, previousBlinkMillis, previousRampMillis, currentMillis=0;
 long timeElapsed = 0;
 int hallLineState=1, hallBeforeState, hallBeforePrevState, hallLinePrevState;   // variables for reading and storing the hall sensors status
 
-float rampFunc(float val){
-  return val;
-}
+//float rampFunc(float val){
+//  return val;
+//}
 
 void setup() {
   //neo pixels 
@@ -46,8 +50,10 @@ void setup() {
   
   
   Serial.begin(9600);
-  motor.setup();
-  motor.setProfile(rampFunc);
+  AFMS.begin();
+  myMotor->setSpeed(0);
+ // motor.setup();
+ // motor.setProfile(rampFunc);
   delay(1000);
   allLEDS(0,0,0); // turn leds off
   
@@ -87,21 +93,35 @@ void loop() {
   
 
   if (hallBeforeState && !hallBeforePrevState) {  // passed sensor hallBefore
-    motor.ramp(-.2,1000);
+    currentSpeed=20;
+    targetSpeed=20;
+   // motor.ramp(-.2,1000);
   }
   if (!hallBeforeState && hallBeforePrevState) {  // on sensor hallBefore
-    motor.ramp(-.2,1000);
+    currentSpeed=20;
+    targetSpeed=20;
+   // motor.ramp(-.2,1000);
   }
   if (hallLineState && !hallLinePrevState) {  // passed sensor hallLine
-    motor.ramp(-1,1000);
+    targetSpeed = 190;
+   // motor.ramp(-1,1000);
   }
   if (!hallLineState && hallLinePrevState) {  // on sensor hallBefore
-    motor.ramp(0,1000);
+    targetSpeed =0;
+    //motor.ramp(0,1000);
     if (racing==1){
       lapCounter++;
     }
   }
 
+  if (currentMillis - previousRampMillis >= 10){
+    previousRampMillis = currentMillis; 
+    if (currentSpeed < targetSpeed){
+      currentSpeed = currentSpeed +1; 
+    }
+    myMotor->setSpeed(currentSpeed);
+  }
+  
   if (!hallLineState && !hallLinePrevState){ // still on sensor hallLine
     if (resetting && timeElapsed>4000){ 
       resetting =0;
@@ -115,18 +135,19 @@ void loop() {
   }
   
   if (resetting == 1 && timeElapsed > 2000){ // let solar power die, then kick in motor reset.
-    motor.idle();
+    //motor.idle();
+    myMotor->run(FORWARD);
   }else{
-    motor.stop();
+  //  motor.stop();
+    myMotor->run(RELEASE);
+    currentSpeed=0;
   }
 
   if (resetting == 0 && racing ==0){
     waitToStart();
   }
 
-  if (racing == 1){
-
-    
+  if (racing == 1){    
     // change LED timing ring  
     if (currentMillis - previousTimingMillis >= timeToRace / (strip.numPixels() * lapsToWin)){
       previousTimingMillis = currentMillis;
@@ -141,13 +162,11 @@ void loop() {
       timingIndexLED++;
       if (timingIndexLED ==48){
         timingIndexLED=0;
-      }
-      
+      }      
     }
-
-
     
     if (lapCounter==lapsToWin){
+      Serial.write(timeElapsed); 
       endRace(1);      
     }
     
@@ -156,6 +175,7 @@ void loop() {
     }    
   }
 }
+
 
 void waitToStart(){
   digitalWrite(StartBtnLED, HIGH);  //light Start button telling visitor they can play!
@@ -166,14 +186,14 @@ void waitToStart(){
   timingIndexLED = 0;
   resetting=0;
   timeElapsed =0;
-  colorWipe(60,255,0,0); //red
-  colorWipe(60,255,255,0);  //yellow
-  colorWipe(60,0,255,0);  //green
+  digitalWrite(StartBtnLED, LOW);  
+  colorWipe(40,255,0,0); //red
+  colorWipe(40,255,255,0);  //yellow
+  colorWipe(40,0,255,0);  //green
   for(uint16_t i=30; i<strip.numPixels(); i++) {
     strip.setPixelColor(47-i, 0,0,0); // turn off all green LEDS     
   }
   strip.show(); 
-  digitalWrite(StartBtnLED, LOW);  
   digitalWrite(LightRelayPIN, HIGH); // turn on the lamp.
   previousTimingMillis = startMillis = millis();   //record start time, initialize perviousTimingMillis for new race.
   lapCounter=0;
