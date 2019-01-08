@@ -1,40 +1,34 @@
-//#include "stepperControlAdafruit.h"
+// Last Revised 1/2/2018
+// Written by Joe Meyer, Fabricator III at the Science Museum of Minnesota in St. Paul
+// For Gateway To Science, Bismark, ND
+
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h>
-#include <Adafruit_MotorShield.h>
-#include "utility/Adafruit_MS_PWMServoDriver.h"
 
-#define LEDRingPIN 6
-#define HallLinePIN 5
-#define HallBeforeLinePIN 7
+#define LEDRingPIN 7
+#define HallLinePIN 8
+#define HallBeforeLinePIN 9
+#define MotorPIN 3
 #define LightRelayPIN 4
-#define StartButton 13
-#define StartBtnLED 11
+#define StartButton 14
+#define StartBtnLED 15
+#define RaceTimePot 16
 
 #define BRIGHTNESS 100
 #define NUM_LEDS 48
 
 int lapsToWin = 1; // The number of laps to be completed for win.
-const int timeToRace = 20000;   // in millisec, time you have to complete the designated # of laps.
+long timeToRace = 20000;   // in millisec, time you have to complete the designated # of laps.
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LEDRingPIN, NEO_RGB + NEO_KHZ800);
-Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
-
-Adafruit_DCMotor *myMotor = AFMS.getMotor(1);
-
-//steps per rev, which port, and max RPM
-//stepper motor(100,2,30);
 
 int resetting = 1, racing = 0, hasWon = 1, ledState=0; // flags
-int lapCounter, currentSpeed=20, targetSpeed=100; 
+int lapCounter, currentSpeed=0, targetSpeed; 
 int timingIndexLED;
 unsigned long startMillis=0, previousTimingMillis, previousBlinkMillis, previousRampMillis, currentMillis=0;
 long timeElapsed = 0;
-int hallLineState=1, hallBeforeState, hallBeforePrevState, hallLinePrevState;   // variables for reading and storing the hall sensors status
+int hallLineState=0, hallBeforeState, hallBeforePrevState, hallLinePrevState;   // variables for reading and storing the hall sensors status
 
-//float rampFunc(float val){
-//  return val;
-//}
 
 void setup() {
   //neo pixels 
@@ -42,21 +36,18 @@ void setup() {
   strip.begin();
   allLEDS(0,0,255); //all leds to blue, show life!
   
-  pinMode(HallLinePIN, INPUT_PULLUP);    
-  pinMode(HallBeforeLinePIN, INPUT_PULLUP);    
+  pinMode(HallLinePIN, INPUT);    
+  pinMode(HallBeforeLinePIN, INPUT);    
   pinMode(StartButton, INPUT);  
   pinMode(LightRelayPIN, OUTPUT);   
-  pinMode(StartBtnLED, OUTPUT);
-  
-  
+  pinMode(StartBtnLED, OUTPUT);   
+  pinMode(MotorPIN, OUTPUT);
+  pinMode(RaceTimePot, INPUT);
+    
   Serial.begin(9600);
-  AFMS.begin();
-  myMotor->setSpeed(0);
- // motor.setup();
- // motor.setProfile(rampFunc);
+  analogWrite(MotorPIN,0);
   delay(1000);
   allLEDS(0,0,0); // turn leds off
-  
 }
 
 void loop() {
@@ -71,6 +62,7 @@ void loop() {
       }
       strip.show();
       ledState++;
+          
     }else{  // lose lights, blinking red, ledState toggles off/on
       if (currentMillis - previousBlinkMillis >= 500){
         previousBlinkMillis = currentMillis;
@@ -85,65 +77,66 @@ void loop() {
     }  
   }
 
-  
+  //store last sensor data
   hallBeforePrevState = hallBeforeState;
   hallLinePrevState = hallLineState;
+  //read new sensor data
   hallBeforeState = digitalRead(HallBeforeLinePIN);
-  hallLineState = digitalRead(HallLinePIN);
-  
+  hallLineState = digitalRead(HallLinePIN);  
 
+  // edge detection  
   if (hallBeforeState && !hallBeforePrevState) {  // passed sensor hallBefore
-    currentSpeed=20;
-    targetSpeed=20;
-   // motor.ramp(-.2,1000);
+    currentSpeed = 40;
+    targetSpeed =40;
+    Serial.println("pass Before");
   }
   if (!hallBeforeState && hallBeforePrevState) {  // on sensor hallBefore
-    currentSpeed=20;
-    targetSpeed=20;
-   // motor.ramp(-.2,1000);
+    currentSpeed=40;
+    targetSpeed =40;    
+    Serial.println("ON Before");
   }
   if (hallLineState && !hallLinePrevState) {  // passed sensor hallLine
-    targetSpeed = 190;
-   // motor.ramp(-1,1000);
+    targetSpeed = 255;    
+    Serial.println("pass LINE");
   }
-  if (!hallLineState && hallLinePrevState) {  // on sensor hallBefore
+  if (!hallLineState && hallLinePrevState) {  // On sensor hallLine    
+    Serial.println("ON LINE");
+    currentSpeed =0;
     targetSpeed =0;
-    //motor.ramp(0,1000);
     if (racing==1){
       lapCounter++;
     }
   }
 
-  if (currentMillis - previousRampMillis >= 10){
+  if (currentMillis - previousRampMillis >= 5){ // every 5 ms check if speed should increase
     previousRampMillis = currentMillis; 
-    if (currentSpeed < targetSpeed){
+    if (currentSpeed < targetSpeed){ // increase speed by 1 if below target.
       currentSpeed = currentSpeed +1; 
     }
-    myMotor->setSpeed(currentSpeed);
   }
   
   if (!hallLineState && !hallLinePrevState){ // still on sensor hallLine
     if (resetting && timeElapsed>4000){ 
+      Serial.println("Done Resetting");
       resetting =0;
       allLEDS(0,0,0);
-      strip.setPixelColor(44, 139,0,139); // set color purple to create virtual pace car
-      strip.setPixelColor(45, 139,0,139); // 
-      strip.setPixelColor(46, 139,0,139); // 
-      strip.setPixelColor(47, 139,0,139); // 
+      strip.setPixelColor(8, 139,0,139); // set color purple to create virtual pace car
+      strip.setPixelColor(9, 139,0,139); // 
+      strip.setPixelColor(10, 139,0,139); // 
+      strip.setPixelColor(11, 139,0,139); //  Start line is at LED 11.
       strip.show();
     }
   }
   
-  if (resetting == 1 && timeElapsed > 2000){ // let solar power die, then kick in motor reset.
-    //motor.idle();
-    myMotor->run(FORWARD);
+  if (resetting == 1 && timeElapsed > 2000){ // 2 sec delay after Solar lamp is off, then kick in motor reset.
+    analogWrite(MotorPIN, currentSpeed);
   }else{
-  //  motor.stop();
-    myMotor->run(RELEASE);
+    analogWrite(MotorPIN,0);
     currentSpeed=0;
   }
 
-  if (resetting == 0 && racing ==0){
+  if (resetting == 0 && racing ==0){ // ready to race, waiting button press
+    
     waitToStart();
   }
 
@@ -178,20 +171,27 @@ void loop() {
 
 
 void waitToStart(){
+  Serial.println("Waiting for button press");
   digitalWrite(StartBtnLED, HIGH);  //light Start button telling visitor they can play!
   while (digitalRead(StartButton) == HIGH) { 
     // wait for user to press start button.
   }  
   racing =1;
-  timingIndexLED = 0;
+  timingIndexLED = 11; // LED 11 is starting line.
   resetting=0;
-  timeElapsed =0;
+  timeElapsed =0;  
+  currentSpeed=0;
+  //read potentiometer
+  timeToRace = analogRead(RaceTimePot);
+  //convert to milliseconds for race time (10 sec thru 61.15 sec)
+  timeToRace = timeToRace*50 + 10000;
+  
   digitalWrite(StartBtnLED, LOW);  
   colorWipe(40,255,0,0); //red
   colorWipe(40,255,255,0);  //yellow
   colorWipe(40,0,255,0);  //green
-  for(uint16_t i=30; i<strip.numPixels(); i++) {
-    strip.setPixelColor(47-i, 0,0,0); // turn off all green LEDS     
+  for(uint16_t i=12; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, 0,0,0); // turn off starting light LEDS     
   }
   strip.show(); 
   digitalWrite(LightRelayPIN, HIGH); // turn on the lamp.
@@ -209,8 +209,8 @@ void endRace(int hw){
 }
 
 void colorWipe(int wait, int R, int G, int B){
-  for(uint16_t i=30; i<strip.numPixels(); i++) {
-    strip.setPixelColor(47-i, R,G,B); //color wipe
+  for(uint16_t i=0; i<15; i++) {
+    strip.setPixelColor(26-i, R,G,B); //color wipe
     delay(wait);
     strip.show();    
   }
